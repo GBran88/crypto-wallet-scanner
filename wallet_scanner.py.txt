@@ -1,0 +1,128 @@
+# wallet_scanner.py
+# Crypto Wallet Balance Checker - BNB, ETH, USDT, BUSD, MATIC
+# Made by GBran88 | Educational Purpose Only
+
+import secrets
+import time
+import requests
+from eth_keys import keys
+
+BSCSCAN_API = ""
+ETHERSCAN_API = ""
+
+TOKENS = {
+    "BUSD": "0xe9e7cea3dedca5984780bafc599bd69add087d56",
+    "USDT": "0x55d398326f99059ff775485246999027b3197955",
+    "DAI": "0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3",
+    "USDC": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "MATIC": "0xcc42724c6683b7e57334c4e856f4c9965ed682bd"
+}
+
+def generate_wallet():
+    pk = secrets.token_bytes(32)
+    pk_hex = pk.hex()
+    addr = keys.PrivateKey(pk).public_key.to_checksum_address()
+    return pk_hex, addr
+
+def get_bnb_balance(addr):
+    url = f"https://api.bscscan.com/api?module=account&action=balance&address={addr}&tag=latest&apikey={BSCSCAN_API}"
+    try:
+        r = requests.get(url, timeout=8)
+        data = r.json()
+        if data['status'] == '1':
+            return int(data['result']) / 1e18
+    except: pass
+    return 0.0
+
+def get_eth_balance(addr):
+    url = f"https://api.etherscan.io/api?module=account&action=balance&address={addr}&tag=latest&apikey={ETHERSCAN_API}"
+    try:
+        r = requests.get(url, timeout=8)
+        data = r.json()
+        if data['status'] == '1':
+            return int(data['result']) / 1e18
+    except: pass
+    return 0.0
+
+def get_token_balance(addr, contract):
+    url = f"https://api.bscscan.com/api?module=account&action=tokenbalance&contractaddress={contract}&address={addr}&tag=latest&apikey={BSCSCAN_API}"
+    try:
+        r = requests.get(url, timeout=8)
+        data = r.json()
+        if data['status'] == '1':
+            return int(data['result']) / 1e18
+    except: pass
+    return 0.0
+
+def get_prices():
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,ethereum,tether&vs_currencies=usd", timeout=10)
+        data = r.json()
+        return (
+            data.get("binancecoin", {}).get("usd", 300),
+            data.get("ethereum", {}).get("usd", 2500),
+            1.0
+        )
+    except: return 300, 2500, 1.0
+
+def main():
+    print("\n🔍 Starting Crypto Wallet Scanner...")
+    print("Checking random BSC/Ethereum wallets for BNB, ETH, USDT, BUSD, MATIC...\n")
+    print("💡 Note: This is for EDUCATIONAL PURPOSES ONLY.")
+    print("   The chance of finding funds is ZERO due to cryptography.\n")
+
+    checked = 0
+    while True:
+        try:
+            pk, addr = generate_wallet()
+            checked += 1
+
+            bnb = get_bnb_balance(addr)
+            eth = get_eth_balance(addr)
+            tokens = {}
+            for name, contract in TOKENS.items():
+                bal = get_token_balance(addr, contract)
+                if bal > 0:
+                    tokens[name] = bal
+
+            bnb_price, eth_price, usdt_price = get_prices()
+            total = (bnb * bnb_price) + (eth * eth_price)
+            for name, bal in tokens.items():
+                if name in ["USDT", "BUSD", "USDC", "DAI"]:
+                    total += bal * usdt_price
+
+            if bnb > 0 or eth > 0 or tokens:
+                print("="*60)
+                print("🎉 FOUND WALLET WITH BALANCE!")
+                print(f"📬 Address: {addr}")
+                print(f"🔑 Private Key: 0x{pk}")
+                print(f"💰 BNB: {bnb:.6f} → ${bnb*bnb_price:.2f}")
+                print(f"💰 ETH: {eth:.6f} → ${eth*eth_price:.2f}")
+                for t, b in tokens.items():
+                    print(f"💰 {t}: {b:.6f}")
+                print(f"💵 Total ≈ ${total:.2f}")
+                print(f"🔍 BscScan: https://bscscan.com/address/{addr}")
+                print(f"🔍 Etherscan: https://etherscan.io/address/{addr}")
+                print("="*60)
+
+                with open("FOUND.txt", "w") as f:
+                    f.write(f"🎉 FOUND!\nAddress: {addr}\nKey: 0x{pk}\n")
+                    f.write(f"BNB: {bnb:.6f} (${bnb*bnb_price:.2f})\n")
+                    f.write(f"ETH: {eth:.6f} (${eth*eth_price:.2f})\n")
+                    for t, b in tokens.items():
+                        f.write(f"{t}: {b:.6f}\n")
+                    f.write(f"Total: ${total:.2f}\n")
+
+            if checked % 10 == 0:
+                print(f"✅ Checked {checked} wallets... (Press Ctrl+C to stop)")
+
+            time.sleep(1)
+
+        except KeyboardInterrupt:
+            print("\n🛑 Stopped by user.")
+            print(f"✅ Total checked: {checked}")
+            break
+        except: pass
+
+if __name__ == "__main__":
+    main()
